@@ -2,6 +2,7 @@
 import copy
 import json
 from collections import defaultdict
+import os
 from typing import List, Callable, Union
 
 # Package/library imports
@@ -9,7 +10,7 @@ from openai import OpenAI
 
 
 # Local imports
-from .util import function_to_json, debug_print, merge_chunk
+from .util import function_to_json, debug_print, function_to_json_vllm, merge_chunk
 from .types import (
     Agent,
     AgentFunction,
@@ -26,7 +27,10 @@ __CTX_VARS_NAME__ = "context_variables"
 class Swarm:
     def __init__(self, client=None):
         if not client:
-            client = OpenAI()
+            client = OpenAI(
+                api_key=os.environ.get("OPENAI_API_KEY"),
+                base_url=os.environ.get("OPENAI_API_BASE"),
+            )
         self.client = client
 
     def get_chat_completion(
@@ -47,7 +51,7 @@ class Swarm:
         messages = [{"role": "system", "content": instructions}] + history
         debug_print(debug, "Getting chat completion for...:", messages)
 
-        tools = [function_to_json(f) for f in agent.functions]
+        tools = [function_to_json_vllm(f) for f in agent.functions]
         # hide context_variables from model
         for tool in tools:
             params = tool["function"]["parameters"]
@@ -66,7 +70,28 @@ class Swarm:
         if tools:
             create_params["parallel_tool_calls"] = agent.parallel_tool_calls
 
-        return self.client.chat.completions.create(**create_params)
+        response = self.client.chat.completions.create(**create_params)
+        
+        # 处理vllm返回的非标准格式
+        if isinstance(response, dict) and 'choices' in response:
+            # 这是vllm的响应格式
+            choice = response['choices'][0]
+            if 'message' in choice:
+                message = choice['message']
+            else:
+                # 如果没有message字段,我们需要从content和tool_calls构建一个
+                message = {
+                    'role': 'assistant',
+                    'content': choice.get('content', ''),
+                }
+                if 'tool_calls' in choice:
+                    message['tool_calls'] = self._process_vllm_tool_calls(choice['tool_calls'])
+            
+            # 将处理后的消息包装成OpenAI格式的响应
+            return type('ChatCompletionMessage', (), {'message': type('Message', (), message)})()
+        
+        # 如果是标准OpenAI格式,直接返回
+        return response
 
     def handle_function_result(self, result, debug) -> Result:
         match result:
@@ -265,18 +290,25 @@ class Swarm:
                 stream=stream,
                 debug=debug,
             )
-            message = completion.choices[0].message
+            
+            # 处理返回的消息
+            if hasattr(completion, 'choices'):
+                message = completion.choices[0].message
+            else:
+                message = completion.message  # 这是我们在get_chat_completion中构造的消息
+
             debug_print(debug, "Received completion:", message)
             message.sender = active_agent.name
-            history.append(
-                json.loads(message.model_dump_json())
-            )  # to avoid OpenAI types (?)
+            
+            # 将消息转换为字典并添加到历史记录
+            message_dict = json.loads(json.dumps(message, default=lambda o: o.__dict__))
+            history.append(message_dict)
 
-            if not message.tool_calls or not execute_tools:
+            if not getattr(message, 'tool_calls', None) or not execute_tools:
                 debug_print(debug, "Ending turn.")
                 break
 
-            # handle function calls, updating context_variables, and switching agents
+            # 处理工具调用
             partial_response = self.handle_tool_calls(
                 message.tool_calls, active_agent.functions, context_variables, debug
             )
@@ -290,3 +322,17 @@ class Swarm:
             agent=active_agent,
             context_variables=context_variables,
         )
+
+    def _process_vllm_tool_calls(self, tool_calls):
+        processed_calls = []
+        for call in tool_calls:
+            processed_call = {
+                'id': call.get('id', ''),
+                'type': 'function',
+                'function': {
+                    'name': call['tool_name'],
+                    'arguments': json.dumps(call['parameters'])
+                }
+            }
+            processed_calls.append(processed_call)
+        return processed_calls
