@@ -85,7 +85,7 @@ class Swarm:
                     'content': choice.get('content', ''),
                 }
                 if 'tool_calls' in choice:
-                    message['tool_calls'] = self._process_vllm_tool_calls(choice['tool_calls'])
+                    message['tool_calls'] = self._process_tool_calls(choice['tool_calls'])
             
             # 将处理后的消息包装成OpenAI格式的响应
             return type('ChatCompletionMessage', (), {'message': type('Message', (), message)})()

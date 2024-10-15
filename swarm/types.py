@@ -4,16 +4,19 @@ from openai.types.chat.chat_completion_message_tool_call import (
     Function,
 )
 from typing import List, Callable, Union, Optional
-
+from dotenv import load_dotenv
+import os
+load_dotenv()
 # Third-party imports
 from pydantic import BaseModel
 
 AgentFunction = Callable[[], Union[str, "Agent", dict]]
 
 
+
 class Agent(BaseModel):
     name: str = "Agent"
-    model: str = "gpt-4"
+    model: str = os.getenv("OPENAI_API_MODEL")
     instructions: Union[str, Callable[[], str]] = "You are a helpful agent."
     functions: List[AgentFunction] = []
     tool_choice: str = 'auto'

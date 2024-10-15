@@ -1,7 +1,9 @@
 from swarm import Swarm, Agent
 from dotenv import load_dotenv
-
+import os
 load_dotenv()
+
+#print("using openai api base: ", os.getenv("OPENAI_API_BASE"))
 
 client = Swarm()
 
