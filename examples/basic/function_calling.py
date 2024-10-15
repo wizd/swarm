@@ -16,9 +16,11 @@ def get_weather(location) -> str:
     location (str): The location to query weather for
 
     Returns:
-    str: A JSON formatted string containing temperature and unit
+    str: A JSON formatted string containing location, temperature and unit
     """
-    return "{'temp':67, 'unit':'F'}"
+
+    print("get_weather called with location: ", location)
+    return f"{{'location': '{location}', 'temperature': 67, 'unit': 'F'}}"
 
 
 agent = Agent(
@@ -27,7 +29,7 @@ agent = Agent(
     functions=[get_weather],
 )
 
-messages = [{"role": "user", "content": "What's the weather in NYC?"}]
+messages = [{"role": "user", "content": "What's the weather in New York?"}]
 
 response = client.run(agent=agent, messages=messages)
 print(response.messages[-1]["content"])
