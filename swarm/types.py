@@ -6,7 +6,7 @@ from openai.types.chat.chat_completion_message_tool_call import (
 from typing import List, Callable, Union, Optional
 from dotenv import load_dotenv
 import os
-load_dotenv()
+load_dotenv(override=True)
 # Third-party imports
 from pydantic import BaseModel
 

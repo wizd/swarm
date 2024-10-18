@@ -1,11 +1,11 @@
+import os
 from swarm import Swarm, Agent
 from dotenv import load_dotenv
-import os
-load_dotenv()
-
-#print("using openai api base: ", os.getenv("OPENAI_API_BASE"))
+load_dotenv(override=True)
 
 client = Swarm()
+
+print(os.environ["OPENAI_API_BASE"])
 
 
 def get_weather(location) -> str:
